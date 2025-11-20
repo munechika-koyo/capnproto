@@ -35,6 +35,8 @@
 #include <zlib.h>
 #endif // KJ_HAS_ZLIB
 
+#include <kj/fut.h>
+
 namespace kj {
 
 // =======================================================================================
@@ -7440,28 +7442,33 @@ public:
     co_return result == BREAK_LOOP_CONN_OK ? true : false;
   }
 
-  kj::Promise<LoopResult> startLoopImpl() {
-    return loop().catch_([this](kj::Exception&& e) {
-      // Exception; report 5xx.
+  kj::Fut<LoopResult> startLoopImpl() {
+    try {
+      co_return co_await loop();
+    } catch (...) {
+      KJ_UNIMPLEMENTED("TODO");
+    }
+    // return loop().catch_([this](kj::Exception&& e) {
+    //   // Exception; report 5xx.
 
-      KJ_IF_SOME(p, webSocketError) {
-        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
-        // the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(p);
-        webSocketError = kj::none;
-        return kj::mv(promise);
-      }
+    //   KJ_IF_SOME(p, webSocketError) {
+    //     // sendWebSocketError() was called. Finish sending and close the connection. Don't log
+    //     // the exception because it's probably a side-effect of this.
+    //     auto promise = kj::mv(p);
+    //     webSocketError = kj::none;
+    //     return kj::mv(promise);
+    //   }
 
-      KJ_IF_SOME(p, tunnelRejected) {
-        // reject() was called to reject a CONNECT request. Finish sending and close the connection.
-        // Don't log the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(p);
-        tunnelRejected = kj::none;
-        return kj::mv(promise);
-      }
+    //   KJ_IF_SOME(p, tunnelRejected) {
+    //     // reject() was called to reject a CONNECT request. Finish sending and close the connection.
+    //     // Don't log the exception because it's probably a side-effect of this.
+    //     auto promise = kj::mv(p);
+    //     tunnelRejected = kj::none;
+    //     return kj::mv(promise);
+    //   }
 
-      return sendError(kj::mv(e));
-    });
+    //   return sendError(kj::mv(e));
+    // });
   }
 
   SuspendedRequest suspend(SuspendableRequest& suspendable) {
@@ -7517,7 +7524,7 @@ private:
     return HttpInputStreamImpl(stream, table);
   }
 
-  kj::Promise<LoopResult> loop() {
+  kj::Fut<LoopResult> loop() {
     bool firstRequest = true;
 
     while (true) {
@@ -7618,7 +7625,7 @@ private:
         receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
       }
 
-      auto requestOrProtocolError = co_await receivedHeaders;
+      auto requestOrProtocolError = co_await kj::mv(receivedHeaders);
       auto loopResult = co_await onHeaders(kj::mv(requestOrProtocolError));
 
       switch (loopResult) {
@@ -7631,7 +7638,7 @@ private:
     }
   }
 
-  kj::Promise<LoopResult> onHeaders(HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
+  kj::Fut<LoopResult> onHeaders(HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
     if (timedOut) {
       // Client took too long to send anything, so we're going to close the connection. In
       // theory, we should send back an HTTP 408 error -- it is designed exactly for this
@@ -7692,7 +7699,7 @@ private:
     KJ_UNREACHABLE;
   }
 
-  kj::Promise<LoopResult> onConnect(HttpHeaders::ConnectRequest& request) {
+  kj::Fut<LoopResult> onConnect(HttpHeaders::ConnectRequest& request) {
     auto& headers = httpInput.getHeaders();
 
     currentMethod = HttpConnectMethod();
@@ -7744,7 +7751,8 @@ private:
       // Finish sending and close the connection.
       auto promise = kj::mv(p);
       tunnelRejected = kj::none;
-      co_return co_await promise;
+      // co_return co_await promise;
+      KJ_UNIMPLEMENTED("TODO");
     }
 
     if (httpOutput.isBroken()) {
@@ -7755,7 +7763,7 @@ private:
     co_return BREAK_LOOP_CONN_ERR;
   }
 
-  kj::Promise<LoopResult> onRequest(HttpHeaders::Request& request) {
+  kj::Fut<LoopResult> onRequest(HttpHeaders::Request& request) {
     auto& headers = httpInput.getHeaders();
 
     currentMethod = request.method;
@@ -7786,7 +7794,8 @@ private:
       // sendWebSocketError() was called. Finish sending and close the connection.
       auto promise = kj::mv(p);
       webSocketError = kj::none;
-      co_return co_await promise;
+      // co_return co_await promise;
+      KJ_UNIMPLEMENTED("TODO");
     }
 
     if (upgraded) {
